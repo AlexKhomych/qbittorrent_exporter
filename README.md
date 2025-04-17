@@ -33,6 +33,10 @@ systemctl enable qbittorrent_exporter.service --now --user
 ```
 [Read more here](https://manpages.debian.org/bullseye/systemd/loginctl.1.en.html)
 
+#### Optional(Grafana Dashboard)
+
+- Dashboard ID: `23261`
+- Dashboard Link: [Dashboard](https://grafana.com/grafana/dashboards/23261-qbittorrent-dashboard/?tab=reviews)
 
 ### Debug
 
