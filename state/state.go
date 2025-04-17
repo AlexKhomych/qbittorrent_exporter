@@ -37,8 +37,8 @@ func GetStateStore() (*StateStore, error) {
 }
 
 type State struct {
-  TransferInfo TransferInfoState `json:"transfer_info"`
-} 
+	TransferInfo TransferInfoState `json:"transfer_info"`
+}
 
 type TransferInfoState struct {
 	DlInfoData      int64 `json:"dl_info_data"`
@@ -83,15 +83,25 @@ func (s *StateStore) UpdateTransferInfoState(cDl, cUp int64) error {
 	state := s.state
 
 	var dDl, dUp int64
-	if cDl > state.TransferInfo.DlInfoData {
+	if cDl >= state.TransferInfo.DlInfoData {
 		dDl = cDl - state.TransferInfo.DlInfoData
 	} else {
 		dDl = cDl
+		slog.Info(
+			"Current DlInfoData is lower than the last recorded one. Posibility of session restart",
+			"cur_dl_info_data", cDl,
+			"last_dl_info_data", state.TransferInfo.DlInfoData,
+		)
 	}
-	if cUp > state.TransferInfo.UpInfoData {
+	if cUp >= state.TransferInfo.UpInfoData {
 		dUp = cUp - state.TransferInfo.UpInfoData
 	} else {
 		dUp = cUp
+		slog.Info(
+			"Current UpInfoData is lower than the last recorded one. Posibility of session restart",
+			"cur_up_info_data", cDl,
+			"last_up_info_data", state.TransferInfo.UpInfoData,
+		)
 	}
 
 	dlInfoDataTotal := state.TransferInfo.DlInfoDataTotal + dDl
