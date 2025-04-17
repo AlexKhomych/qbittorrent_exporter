@@ -6,12 +6,15 @@
 curl --proto '=https' --tlsv1.3 -sSfL  https://raw.githubusercontent.com/AlexKhomych/qbittorrent_exporter/refs/tags/v0.1.0-alpha/deploy/quickstart.sh | bash
 ```
 
-Edit `config.yaml` under `$HOME/.config/qbittorrent_exporter/config.yaml` path.
-And restart `systemctl restart qbittorrent_exporter.service --user`.
+1) Edit `config.yaml` under `$HOME/.config/qbittorrent_exporter/config.yaml` path.
+2) And restart `systemctl restart qbittorrent_exporter.service --user`.
 
 ### Configuration
 
-Environmental variables take priority over config values. Example:
+- Supports configuration with both file and env.
+- Environmental variables take priority over config values.
+
+Example ENVs:
 ```
 QBT_USERNAME="admin"
 QBT_PASSWORD="adminpassword"
@@ -40,14 +43,13 @@ systemctl enable qbittorrent_exporter.service --now --user
 
 ### Debug
 
-#### Try lowering `-log-level` flag in `$HOME/.config/systemd/user/qbittorrent_exporter.service` to `debug`
+Try lowering `-log-level` flag in `$HOME/.config/systemd/user/qbittorrent_exporter.service` to `debug`
 
 #### Viewing logs
 ```bash
 journalctl --user -u qbittorrent_exporter.service
 ```
 
-### Credis
+### Credits
 
 Inspired by [@caseyscarborough](https://github.com/caseyscarborough/qbittorrent-exporter)
-
