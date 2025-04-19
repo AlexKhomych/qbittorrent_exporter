@@ -3,6 +3,7 @@ package log
 import (
 	"log/slog"
 	"os"
+	"strings"
 )
 
 var (
@@ -36,34 +37,33 @@ func Fatal(msg string, args ...any) {
 	os.Exit(1)
 }
 
-func InitializeLog(logFormat, logLevel string) *slog.Logger {
-	if logger == nil {
-
-		switch logLevel {
-		case "debug":
-			lvl.Set(slog.LevelDebug)
-		case "info":
-			lvl.Set(slog.LevelInfo)
-		case "warn":
-			lvl.Set(slog.LevelWarn)
-		case "error":
-			lvl.Set(slog.LevelError)
-		default:
-			lvl.Set(slog.LevelInfo)
-		}
-
-		opts := &slog.HandlerOptions{
-			Level: lvl,
-		}
-
-		switch logFormat {
-		case "json":
-			logger = slog.New(slog.NewJSONHandler(os.Stdout, opts))
-		default:
-			logger = slog.New(slog.NewTextHandler(os.Stdout, opts))
-		}
-		slog.SetDefault(logger)
-
+func Set(logLevel, logFormat string) *slog.Logger {
+	logLevel = strings.ToLower(logLevel)
+	switch logLevel {
+	case "debug":
+		lvl.Set(slog.LevelDebug)
+	case "info":
+		lvl.Set(slog.LevelInfo)
+	case "warn":
+		lvl.Set(slog.LevelWarn)
+	case "error":
+		lvl.Set(slog.LevelError)
+	default:
+		lvl.Set(slog.LevelInfo)
 	}
+
+	opts := &slog.HandlerOptions{
+		Level: lvl,
+	}
+
+	switch logFormat {
+	case "json":
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, opts))
+	default:
+		logger = slog.New(slog.NewTextHandler(os.Stdout, opts))
+	}
+
+	slog.SetDefault(logger)
+	Info("Updated logger with LogFormat: " + logFormat + ", LogLevel: " + logLevel)
 	return logger
 }

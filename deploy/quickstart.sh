@@ -6,7 +6,7 @@ HOME="${HOME:-"~"}"
 
 mkdir -p $HOME/.local/bin $HOME/.config/qbittorrent_exporter $HOME/.local/share/qbittorrent_exporter $HOME/.config/systemd/user
 
-curl -L https://github.com/AlexKhomych/qbittorrent_exporter/releases/download/v0.1.0-alpha/qbittorrent_exporter -o $HOME/.local/bin/qbittorrent_exporter
+curl -L https://github.com/AlexKhomych/qbittorrent_exporter/releases/download/v0.2.0-alpha/qbittorrent_exporter -o $HOME/.local/bin/qbittorrent_exporter
 chmod +x $HOME/.local/bin/qbittorrent_exporter
 
 cat > $HOME/.config/qbittorrent_exporter/config.yaml << EOF
@@ -18,6 +18,13 @@ qBittorrent:
 metrics:
   port: 17171
   urlPath: /metrics
+
+global:
+  statePath: $HOME/.local/share/qbittorrent_exporter/state.json
+EOF
+
+cat > $HOME/.config/qbittorrent_exporter/env << EOF
+QBE_LOG_LEVEL=info
 EOF
 
 cat > $HOME/.config/systemd/user/qbittorrent_exporter.service << EOF
@@ -27,10 +34,8 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-ExecStart=$HOME/.local/bin/qbittorrent_exporter \
-    -log-format json -log-level info \
-    -state-store-path $HOME/.local/share/qbittorrent_exporter/state.json \
-    -config-path $HOME/.config/qbittorrent_exporter/config.yaml
+EnvironmentFile=$HOME/.config/qbittorrent_exporter/env
+ExecStart=$HOME/.local/bin/qbittorrent_exporter -log-format default -log-level \$QBE_LOG_LEVEL -config $HOME/.config/qbittorrent_exporter/config.yaml
 ExecReload=/bin/kill -s HUP \$MAINPID
 WorkingDirectory=$HOME/.local/share/qbittorrent_exporter
 Restart=always

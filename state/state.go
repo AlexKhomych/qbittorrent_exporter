@@ -3,41 +3,39 @@ package state
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
+	"qbittorrent_exporter/lib/log"
+	"qbittorrent_exporter/lib/scheduler"
+	"qbittorrent_exporter/validator"
 	"sync"
+	"time"
 )
-
-type StateStore struct {
-	state State
-	path  string
-	lock  sync.Mutex
-}
 
 var (
-	singleInstance *StateStore
+	isSet          bool   = false
+	statePath      string = "state.json"
+	lock           sync.Mutex
+	singleInstance State
 )
-
-func NewStateStore(path string) *StateStore {
-	if singleInstance != nil {
-		slog.Info("StateStore instance is already initialized, skipping...")
-		return singleInstance
-	}
-	return &StateStore{
-		path:  path,
-		state: readState(path),
-	}
-}
-
-func GetStateStore() (*StateStore, error) {
-	if singleInstance == nil {
-		return nil, fmt.Errorf("Please initialize StateStore first")
-	}
-	return singleInstance, nil
-}
 
 type State struct {
 	TransferInfo TransferInfoState `json:"transfer_info"`
+}
+
+func init() {
+	scheduler.Run(func() error {
+		return singleInstance.write()
+	}, &scheduler.PeriodicTaskOpts{
+		Interval: 30 * time.Second,
+		IsFast:   false,
+	})
+}
+
+func Get() State {
+	if !isSet {
+		singleInstance = readState(statePath)
+	}
+	return singleInstance
 }
 
 type TransferInfoState struct {
@@ -47,82 +45,66 @@ type TransferInfoState struct {
 	UpInfoDataTotal int64 `json:"up_info_data_total"`
 }
 
-func (s *StateStore) State() State {
-	return s.state
-}
-
 func readState(path string) State {
 	var state State
 
-	info, err := os.Stat(path)
-	if err != nil {
-		slog.Error(err.Error() + ", will be created on next write")
+	if err := validator.ValidatePath(path, false); err != nil {
+		log.Warn(err.Error())
+		log.Info("State file will be created on the next write")
 		return state
 	}
-	if info.IsDir() {
-		slog.Info("Store path is directory, using empty state")
-		return state
-	}
+
 	f, err := os.Open(path)
 	if err != nil {
-		slog.Info(err.Error())
+		log.Error(err.Error() + ". Using transient state")
 		return state
 	}
 	if err := json.NewDecoder(f).Decode(&state); err != nil {
-		slog.Error(err.Error())
+		log.Error(err.Error())
 		return state
 	}
 
 	return state
 }
 
-func (s *StateStore) UpdateTransferInfoState(cDl, cUp int64) error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+func (s *State) UpdateTransferInfo(dl, up int64) {
+	lock.Lock()
+	defer lock.Unlock()
 
-	state := s.state
+	s.TransferInfo.calculateDelta(dl, up)
+}
 
-	var dDl, dUp int64
-	if cDl >= state.TransferInfo.DlInfoData {
-		dDl = cDl - state.TransferInfo.DlInfoData
-	} else {
-		dDl = cDl
-		slog.Info(
-			"Current DlInfoData is lower than the last recorded one. Posibility of session restart",
-			"cur_dl_info_data", cDl,
-			"last_dl_info_data", state.TransferInfo.DlInfoData,
-		)
-	}
-	if cUp >= state.TransferInfo.UpInfoData {
-		dUp = cUp - state.TransferInfo.UpInfoData
-	} else {
-		dUp = cUp
-		slog.Info(
-			"Current UpInfoData is lower than the last recorded one. Posibility of session restart",
-			"cur_up_info_data", cDl,
-			"last_up_info_data", state.TransferInfo.UpInfoData,
-		)
-	}
+func (s *State) write() error {
+	lock.Lock()
+	defer lock.Unlock()
 
-	dlInfoDataTotal := state.TransferInfo.DlInfoDataTotal + dDl
-	upInfoDataTotal := state.TransferInfo.UpInfoDataTotal + dUp
-
-	state.TransferInfo.DlInfoData = cDl
-	state.TransferInfo.DlInfoDataTotal = dlInfoDataTotal
-	state.TransferInfo.UpInfoData = cUp
-	state.TransferInfo.UpInfoDataTotal = upInfoDataTotal
-
-	s.state = state
-
-	f, err := os.OpenFile(s.path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(statePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		slog.Error(err.Error())
+		log.Error(err.Error())
 		return fmt.Errorf("Failed to open state store file")
 	}
-	if err := json.NewEncoder(f).Encode(&s.state); err != nil {
-		slog.Error(err.Error())
+	if err := json.NewEncoder(f).Encode(&s); err != nil {
+		log.Error(err.Error())
 		return fmt.Errorf("Failed to encode json to a state store file")
 	}
 
 	return nil
+}
+
+func (t *TransferInfoState) calculateDelta(dl, up int64) {
+	var delta = func(current, previous int64) int64 {
+		if current >= previous {
+			return current - previous
+		} else {
+			log.Info("Current value is lower than the previously recorded one. Posibility of session restart")
+			return current
+		}
+	}
+
+	t.DlInfoDataTotal += delta(dl, t.DlInfoData)
+	t.UpInfoDataTotal += delta(up, t.UpInfoData)
+	t.DlInfoData = dl
+	t.UpInfoData = up
+
+	log.Debug(fmt.Sprintf("TransferInfoState update: %+v", t))
 }

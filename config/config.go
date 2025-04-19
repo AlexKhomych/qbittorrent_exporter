@@ -2,68 +2,73 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"qbittorrent_exporter/lib/log"
+	"qbittorrent_exporter/lib/parser"
+	"qbittorrent_exporter/validator"
 	"strconv"
+	"sync"
 )
 
-const (
-	e_QBT_USERNAME string = "QBT_USERNAME"
-	e_QBT_PASSWORD string = "QBT_PASSWORD"
-	e_QBT_BASE_URL string = "QBT_BASE_URL"
-
-	e_METRICS_PORT     string = "METRICS_PORT"
-	e_METRICS_URL_PATH string = "METRICS_URL_PATH"
+var (
+	configPath     string = "config.yaml"
+	isSet          bool   = false
+	singleInstance Config
+	lock           sync.Mutex
 )
 
-type Config struct {
-	QBittorrent QBittorrentConfig `yaml:"qBittorrent"`
-	Metrics     MetricsConfig     `yaml:"metrics"`
+type (
+	Config struct {
+		QBittorrent QBittorrentConfig `yaml:"qBittorrent"`
+		Metrics     MetricsConfig     `yaml:"metrics"`
+		Global      GlobalConfig      `yaml:"global"`
+	}
+	QBittorrentConfig struct {
+		BaseURL  string `yaml:"baseUrl" env:"QBE_URL"`
+		Username string `yaml:"username" env:"QBE_USERNAME"`
+		Password string `yaml:"password" env:"QBE_PASSWORD"`
+	}
+	MetricsConfig struct {
+		Port    string `yaml:"port" env:"QBE_METRICS_PORT"`
+		UrlPath string `yaml:"urlPath" env:"QBE_METRICS_PATH"`
+	}
+	GlobalConfig struct {
+		StatePath string `yaml:"statePath" env:"QBE_STATE_PATH"`
+	}
+)
+
+func UpdatePath(path string) {
+	configPath = path
 }
 
-type QBittorrentConfig struct {
-	BaseURL  string `yaml:"baseUrl"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
+func Get() Config {
+	lock.Lock()
+	defer lock.Unlock()
+	if !isSet {
+		log.Debug("Config isSet=false, initializing...")
+		singleInstance = initializeConfig(configPath)
+		isSet = true
+	}
+	return singleInstance
 }
 
-type MetricsConfig struct {
-	Port    string `yaml:"port"`
-	UrlPath string `yaml:"urlPath"`
-}
-
-func (c Config) WithEnvPriority() Config {
-	return WithEnvPriority()
-}
-
-func WithEnvPriority() Config {
-	config := Get()
-
-	config.QBittorrent.BaseURL = getEnv(e_QBT_BASE_URL, config.QBittorrent.BaseURL)
-	config.QBittorrent.Username = getEnv(e_QBT_USERNAME, config.QBittorrent.Username)
-	config.QBittorrent.Password = getEnv(e_QBT_PASSWORD, config.QBittorrent.Password)
-
-	config.Metrics.Port = getEnv(e_METRICS_PORT, config.Metrics.Port)
-	config.Metrics.UrlPath = getEnv(e_METRICS_URL_PATH, config.Metrics.UrlPath)
-
-	update(config)
+func initializeConfig(path string) Config {
+	var config Config
+	if err := validator.ValidatePath(configPath, false); err != nil {
+		panic(err)
+	}
+	if err := parser.ParseYamlFile(path, &config); err != nil {
+		panic(fmt.Errorf("error parsing config: %w", err))
+	}
+	log.Debug("Loading environment variables into the config")
+	loadEnvs(&config)
 	return config
 }
 
-func Validate() error {
-	config := Get()
-
+// TODO:
+func Validate(config Config) error {
 	if _, err := strconv.ParseUint(config.Metrics.Port, 10, 16); err != nil {
 		log.Error(err.Error())
 		return fmt.Errorf("Failed to validate config.Metrics.Port")
 	}
 	return nil
-}
-
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		log.Info("Using environmental variable", "key", key)
-		return value
-	}
-	return fallback
 }

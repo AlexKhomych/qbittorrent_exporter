@@ -1,0 +1,11 @@
+qBittorrent:
+  baseUrl: http://127.0.0.1:8080
+  username: admin
+  password: adminpassword
+
+metrics:
+  port: 17171
+  urlPath: /metrics
+
+global:
+  statePath: /app/config/state.json
