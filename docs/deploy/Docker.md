@@ -13,7 +13,7 @@ Metrics will be available on `http://[docker_host_ip]:17171/metrics` by default.
 
 ## Configuration
 
-Please read [Configuration](../Configuration) for more info.
+Please read [Configuration](../Configuration.md) for more info.
 
 > Only docker specific(different) options will be explained here.
 
@@ -21,7 +21,7 @@ Please read [Configuration](../Configuration) for more info.
 
 State file is created under `/app/config/state.json` by default. Can be changed using either config file or envs.
 
-[Read more](../Configuration#state)
+[Read more](../Configuration.md#state)
 
 ### Run with custom config
 
@@ -30,7 +30,7 @@ State file is created under `/app/config/state.json` by default. Can be changed 
 mkdir .config
 touch .config/config.yaml
 ```
-2. Edit config file [Read more](../Configuration#config-file)
+2. Edit config file [Read more](../Configuration.md#config-file)
 3. Run docker container with mount flag
 ```bash
 docker run -dit --name qbittorrent_exporter -p 17171:17171 -v ./config:/app/config alexkhomychw/qbittorrent_exporter:v0.2.0-alpha
@@ -47,7 +47,7 @@ docker run -dit --name qbittorrent_exporter \
     alexkhomychw/qbittorrent_exporter:v0.2.0-alpha
 ```
 
-[Available Envs](../Configuration#envs)
+[Available Envs](../Configuration.md#envs)
 
 ## Debug
 

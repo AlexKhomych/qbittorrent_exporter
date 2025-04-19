@@ -2,8 +2,8 @@
 
 ## Deployment options
 
-- [Docker deployment](docs/deploy/Docker)
-- [Systemd deployment](docs/deploy/Systemd)
+- [Docker deployment](docs/deploy/Docker.md)
+- [Systemd deployment](docs/deploy/Systemd.md)
 
 ## Grafana dashboard
 
