@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"qbittorrent_exporter/lib/log"
 	"qbittorrent_exporter/lib/scheduler"
 	"qbittorrent_exporter/validator"
@@ -15,7 +16,7 @@ var (
 	isSet          bool   = false
 	statePath      string = "state.json"
 	lock           sync.Mutex
-	singleInstance State
+	singleInstance *State
 )
 
 type State struct {
@@ -31,8 +32,8 @@ func init() {
 	})
 }
 
-func Get() State {
-	if !isSet {
+func Get() *State {
+	if singleInstance == nil {
 		singleInstance = readState(statePath)
 	}
 	return singleInstance
@@ -45,26 +46,28 @@ type TransferInfoState struct {
 	UpInfoDataTotal int64 `json:"up_info_data_total"`
 }
 
-func readState(path string) State {
+func readState(path string) *State {
 	var state State
 
 	if err := validator.ValidatePath(path, false); err != nil {
 		log.Warn(err.Error())
 		log.Info("State file will be created on the next write")
-		return state
+		return &State{}
 	}
 
 	f, err := os.Open(path)
 	if err != nil {
 		log.Error(err.Error() + ". Using transient state")
-		return state
+		return &State{}
 	}
+	defer f.Close()
+
 	if err := json.NewDecoder(f).Decode(&state); err != nil {
 		log.Error(err.Error())
-		return state
+		return &State{}
 	}
 
-	return state
+	return &state
 }
 
 func (s *State) UpdateTransferInfo(dl, up int64) {
@@ -77,6 +80,13 @@ func (s *State) UpdateTransferInfo(dl, up int64) {
 func (s *State) write() error {
 	lock.Lock()
 	defer lock.Unlock()
+
+	absPath, err := filepath.Abs(statePath)
+	if err != nil {
+		log.Error(err.Error())
+	}
+	log.Debug("Writing state into a file: " + absPath)
+	log.Debug(fmt.Sprintf("State: %+v", s))
 
 	f, err := os.OpenFile(statePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
