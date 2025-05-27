@@ -6,7 +6,7 @@ HOME="${HOME:-"~"}"
 
 mkdir -p $HOME/.local/bin $HOME/.config/qbittorrent_exporter $HOME/.local/share/qbittorrent_exporter $HOME/.config/systemd/user
 
-curl -L https://github.com/AlexKhomych/qbittorrent_exporter/releases/download/v0.2.0-alpha/qbittorrent_exporter -o $HOME/.local/bin/qbittorrent_exporter
+curl -L https://github.com/AlexKhomych/qbittorrent_exporter/releases/download/1.0.0/qbittorrent_exporter -o $HOME/.local/bin/qbittorrent_exporter
 chmod +x $HOME/.local/bin/qbittorrent_exporter
 
 cat > $HOME/.config/qbittorrent_exporter/config.yaml << EOF

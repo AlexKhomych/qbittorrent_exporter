@@ -14,7 +14,7 @@ To view supported flags and their description
 ./qbittorrent_exporter -h
 ```
 ```bash
-Version: v0.2.0-alpha
+Version: 1.0.0
 
 Usage: qbittorrent_exporter [ Options... ]
 

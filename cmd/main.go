@@ -18,7 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-const version = "v0.2.0-alpha"
+const version = "1.0.0"
 
 func init() {
 	flag.Usage = func() {
