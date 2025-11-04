@@ -13,7 +13,6 @@ import (
 )
 
 var (
-	isSet          bool   = false
 	statePath      string = "state.json"
 	lock           sync.Mutex
 	singleInstance *State
@@ -21,6 +20,13 @@ var (
 
 type State struct {
 	TransferInfo TransferInfoState `json:"transfer_info"`
+}
+
+type TransferInfoState struct {
+	DlInfoData      int64 `json:"dl_info_data"`
+	DlInfoDataTotal int64 `json:"dl_info_data_total"`
+	UpInfoData      int64 `json:"up_info_data"`
+	UpInfoDataTotal int64 `json:"up_info_data_total"`
 }
 
 func init() {
@@ -32,18 +38,18 @@ func init() {
 	})
 }
 
+func UpdatePath(path string) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	statePath = path
+}
+
 func Get() *State {
 	if singleInstance == nil {
 		singleInstance = readState(statePath)
 	}
 	return singleInstance
-}
-
-type TransferInfoState struct {
-	DlInfoData      int64 `json:"dl_info_data"`
-	DlInfoDataTotal int64 `json:"dl_info_data_total"`
-	UpInfoData      int64 `json:"up_info_data"`
-	UpInfoDataTotal int64 `json:"up_info_data_total"`
 }
 
 func readState(path string) *State {
