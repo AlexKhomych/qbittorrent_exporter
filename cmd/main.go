@@ -18,7 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-const version = "1.0.0"
+const version = "1.0.1"
 
 func init() {
 	flag.Usage = func() {
@@ -54,6 +54,7 @@ func init() {
 
 func main() {
 	config := config.Get()
+	state.UpdatePath(config.Global.StatePath)
 
 	api, err := api.NewQBittorrentAPI(&api.QBittorrentAPIOpts{
 		BaseURL: config.QBittorrent.BaseURL,

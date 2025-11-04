@@ -6,7 +6,7 @@
 docker run -dit --name qbittorrent_exporter \
     --publish 17171:17171 \
     -e QBE_URL='http://[your_qb_url]:[qb_port]' \
-    alexkhomychw/qbittorrent_exporter:1.0.0
+    alexkhomychw/qbittorrent_exporter:1.0.1
 ```
 
 Metrics will be available on `http://[docker_host_ip]:17171/metrics` by default.
@@ -33,7 +33,7 @@ touch .config/config.yaml
 2. Edit config file [Read more](../Configuration.md#config-file)
 3. Run docker container with mount flag
 ```bash
-docker run -dit --name qbittorrent_exporter -p 17171:17171 -v ./config:/app/config alexkhomychw/qbittorrent_exporter:1.0.0
+docker run -dit --name qbittorrent_exporter -p 17171:17171 -v ./config:/app/config alexkhomychw/qbittorrent_exporter:1.0.1
 ```
 
 ### Run using envs
@@ -44,7 +44,7 @@ docker run -dit --name qbittorrent_exporter \
     -e QBE_URL='http://[your_qb_url]:[qb_port]' \
     -e QBE_USERNAME='admin' \
     -e QBE_PASSWORD='adminpassword' \
-    alexkhomychw/qbittorrent_exporter:1.0.0
+    alexkhomychw/qbittorrent_exporter:1.0.1
 ```
 
 [Available Envs](../Configuration.md#envs)
