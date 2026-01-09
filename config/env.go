@@ -9,18 +9,17 @@ import (
 	"strings"
 )
 
-// (v any) - must be a struct reference
 func loadEnvs(v any) {
 	val := reflect.ValueOf(v)
 	typ := reflect.TypeOf(v)
 
-	if typ.Kind() == reflect.Ptr {
+	if typ.Kind() == reflect.Pointer {
 		val = val.Elem()
 		typ = typ.Elem()
 	}
 
 	if typ.Kind() != reflect.Struct {
-		log.Warn("Unsupported type: " + typ.Kind().String())
+		log.Warn("loadEnvs: unsupported type " + typ.Kind().String())
 		return
 	}
 
@@ -29,15 +28,12 @@ func loadEnvs(v any) {
 		fieldValue := val.Field(i)
 
 		if envTag, ok := field.Tag.Lookup("env"); ok {
-			log.Debug(fmt.Sprintf("Field: %s, Kind: %s, Addrssable: %v, CanSet: %v",
-				field.Name, fieldValue.Kind(), fieldValue.CanAddr(), fieldValue.CanSet()))
-
 			env := strings.ToLower(os.Getenv(envTag))
 			if len(env) != 0 && fieldValue.CanSet() {
 				if err := setFieldValue(fieldValue, env); err != nil {
-					log.Error(fmt.Sprintf("Error setting field value: %v\n", err))
+					log.Error(fmt.Sprintf("Failed to set %s from env %s: %v", field.Name, envTag, err))
 				} else {
-					log.Debug(fmt.Sprintf("Updated [%s] with %s value", field.Name, env))
+					log.Debug(fmt.Sprintf("Loaded %s from environment variable", field.Name))
 				}
 			}
 		}

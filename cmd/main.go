@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net/http"
@@ -18,7 +19,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-const version = "1.0.1"
+const version = "1.0.2"
+
+const (
+	torrentUpdateInterval  = 30 * time.Second
+	transferUpdateInterval = 30 * time.Second
+	versionCheckInterval   = 10 * time.Minute
+)
 
 func init() {
 	flag.Usage = func() {
@@ -33,18 +40,18 @@ func init() {
 		logFormat     string
 		configPath    string
 		metricsPrefix string
-
-		useFeatures = map[feature.FeatureFlag]bool{
+		useFeatures   = map[feature.FeatureFlag]bool{
 			feature.TRANSIENT_STATE: false,
 		}
 	)
+
 	flag.StringVar(&logLevel, "log-level", "info", "Log level")
 	flag.StringVar(&logFormat, "log-format", "default", "Log format")
 	flag.StringVar(&configPath, "config", "config.yaml", "Path to yaml config.")
 	flag.StringVar(&metricsPrefix, "prefix", "qb_", "Metrics prefix.")
+
 	setFeatures := feature.Use(useFeatures)
 	defer setFeatures()
-
 	flag.Parse()
 
 	config.UpdatePath(configPath)
@@ -53,47 +60,73 @@ func init() {
 }
 
 func main() {
-	config := config.Get()
-	state.UpdatePath(config.Global.StatePath)
+	cfg := config.Get()
+	initializeState(cfg)
+	client := newHTTPClient(cfg)
 
 	api, err := api.NewQBittorrentAPI(&api.QBittorrentAPIOpts{
-		BaseURL: config.QBittorrent.BaseURL,
+		BaseURL: cfg.QBittorrent.BaseURL,
 		Credentials: &api.QBittorrentCredentials{
-			Username: config.QBittorrent.Username,
-			Password: config.QBittorrent.Password,
+			Username: cfg.QBittorrent.Username,
+			Password: cfg.QBittorrent.Password,
 		},
+		HttpClient: client,
 	})
-
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 
-	runInParallel(api, config)
+	runScheduledTasks(api, cfg)
+
 	scheduler.Get().Wait()
 }
 
-func runInParallel(api *api.QBittorrentAPI, config config.Config) {
+func initializeState(cfg config.Config) {
+	if feature.Get(feature.TRANSIENT_STATE) {
+		state.SetTransientMode(true)
+	} else if cfg.Global.StatePath != "" {
+		state.UpdatePath(cfg.Global.StatePath)
+	} else {
+		log.Debug("No state path configured; state will be transient")
+		state.SetTransientMode(true)
+	}
+}
+
+func newHTTPClient(cfg config.Config) *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DisableKeepAlives: true,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: cfg.QBittorrent.InsecureSkipVerify,
+			},
+		},
+		Timeout: time.Duration(cfg.QBittorrent.Timeout) * time.Second,
+	}
+}
+
+func runScheduledTasks(api *api.QBittorrentAPI, cfg config.Config) {
 	scheduler.Run(func() error {
-		http.Handle(config.Metrics.UrlPath, promhttp.Handler())
-		log.Info("Metrics server is available on port http://0.0.0.0:" + config.Metrics.Port + config.Metrics.UrlPath)
-		if err := http.ListenAndServe(":"+config.Metrics.Port, nil); err != nil {
+		http.Handle(cfg.Metrics.UrlPath, promhttp.Handler())
+		addr := fmt.Sprintf("http://0.0.0.0:%s%s", cfg.Metrics.Port, cfg.Metrics.UrlPath)
+		log.Info("Metrics server is available on port " + addr)
+		if err := http.ListenAndServe(":"+cfg.Metrics.Port, nil); err != nil {
 			log.Error(err.Error())
 		}
 		return nil
 	}, nil)
 
-	metrics := metrics.Get()
-	state := state.Get()
+	metricsClient := metrics.Get()
+	st := state.Get()
 
 	scheduler.Run(func() error {
 		torrents, err := api.TorrentsInfo()
 		if err != nil {
 			return err
 		}
-		metrics.UpdateTorrent(torrents)
+		metricsClient.UpdateTorrent(torrents)
 		return nil
 	}, &scheduler.PeriodicTaskOpts{
-		Interval: 30 * time.Second,
+		Interval: torrentUpdateInterval,
 		IsFast:   true,
 	})
 
@@ -102,23 +135,23 @@ func runInParallel(api *api.QBittorrentAPI, config config.Config) {
 		if err != nil {
 			return err
 		}
-		state.UpdateTransferInfo(transfer.DlInfoData, transfer.UpInfoData)
-		metrics.UpdateTransfer(transfer, state.TransferInfo)
+		st.UpdateTransferInfo(transfer.DlInfoData, transfer.UpInfoData)
+		metricsClient.UpdateTransfer(transfer, st.TransferInfo)
 		return nil
 	}, &scheduler.PeriodicTaskOpts{
-		Interval: 30 * time.Second,
+		Interval: transferUpdateInterval,
 		IsFast:   true,
 	})
 
 	scheduler.Run(func() error {
-		verison, err := api.AppVersion()
+		version, err := api.AppVersion()
 		if err != nil {
 			return err
 		}
-		metrics.UpdateVersion(verison)
+		metricsClient.UpdateVersion(version)
 		return nil
 	}, &scheduler.PeriodicTaskOpts{
-		Interval: 10 * time.Minute,
+		Interval: versionCheckInterval,
 		IsFast:   true,
 	})
 }

@@ -10,65 +10,66 @@ import (
 )
 
 var (
-	configPath     string = "config.yaml"
-	isSet          bool   = false
-	singleInstance Config
-	lock           sync.Mutex
+	configPath string = "config.yaml"
+	isLoaded   bool   = false
+	instance   Config
+	mu         sync.Mutex
 )
 
-type (
-	Config struct {
-		QBittorrent QBittorrentConfig `yaml:"qBittorrent"`
-		Metrics     MetricsConfig     `yaml:"metrics"`
-		Global      GlobalConfig      `yaml:"global"`
-	}
-	QBittorrentConfig struct {
-		BaseURL  string `yaml:"baseUrl" env:"QBE_URL"`
-		Username string `yaml:"username" env:"QBE_USERNAME"`
-		Password string `yaml:"password" env:"QBE_PASSWORD"`
-	}
-	MetricsConfig struct {
-		Port    string `yaml:"port" env:"QBE_METRICS_PORT"`
-		UrlPath string `yaml:"urlPath" env:"QBE_METRICS_PATH"`
-	}
-	GlobalConfig struct {
-		StatePath string `yaml:"statePath" env:"QBE_STATE_PATH"`
-	}
-)
+type Config struct {
+	QBittorrent QBittorrentConfig `yaml:"qBittorrent"`
+	Metrics     MetricsConfig     `yaml:"metrics"`
+	Global      GlobalConfig      `yaml:"global"`
+}
+
+type QBittorrentConfig struct {
+	BaseURL            string `yaml:"baseUrl" env:"QBE_URL"`
+	InsecureSkipVerify bool   `yaml:"insecureSkipVerify" env:"QBE_INSECURE_SKIP_VERIFY"`
+	Username           string `yaml:"username" env:"QBE_USERNAME"`
+	Password           string `yaml:"password" env:"QBE_PASSWORD"`
+	Timeout            int    `yaml:"timeout" env:"QBE_TIMEOUT"`
+}
+
+type MetricsConfig struct {
+	Port    string `yaml:"port" env:"QBE_METRICS_PORT"`
+	UrlPath string `yaml:"urlPath" env:"QBE_METRICS_PATH"`
+}
+
+type GlobalConfig struct {
+	StatePath string `yaml:"statePath" env:"QBE_STATE_PATH"`
+}
 
 func UpdatePath(path string) {
 	configPath = path
 }
 
 func Get() Config {
-	lock.Lock()
-	defer lock.Unlock()
-	if !isSet {
-		log.Debug("Config isSet=false, initializing...")
-		singleInstance = initializeConfig(configPath)
-		isSet = true
+	mu.Lock()
+	defer mu.Unlock()
+	if !isLoaded {
+		log.Debug("Loading configuration from: " + configPath)
+		instance = initializeConfig(configPath)
+		isLoaded = true
 	}
-	return singleInstance
+	return instance
 }
 
 func initializeConfig(path string) Config {
-	var config Config
-	if err := validator.ValidatePath(configPath, false); err != nil {
+	var cfg Config
+	if err := validator.ValidatePath(path, false); err != nil {
 		panic(err)
 	}
-	if err := parser.ParseYamlFile(path, &config); err != nil {
+	if err := parser.ParseYamlFile(path, &cfg); err != nil {
 		panic(fmt.Errorf("error parsing config: %w", err))
 	}
-	log.Debug("Loading environment variables into the config")
-	loadEnvs(&config)
-	return config
+	log.Debug("Loading environment variables into configuration")
+	loadEnvs(&cfg)
+	return cfg
 }
 
-// TODO:
-func Validate(config Config) error {
-	if _, err := strconv.ParseUint(config.Metrics.Port, 10, 16); err != nil {
-		log.Error(err.Error())
-		return fmt.Errorf("Failed to validate config.Metrics.Port")
+func ValidateMetricsPort(cfg Config) error {
+	if _, err := strconv.ParseUint(cfg.Metrics.Port, 10, 16); err != nil {
+		return fmt.Errorf("invalid metrics port: %w", err)
 	}
 	return nil
 }

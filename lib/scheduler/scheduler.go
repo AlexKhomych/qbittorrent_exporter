@@ -73,13 +73,9 @@ func (s *Scheduler) RunPeriodicTask(task taskFunc, o *PeriodicTaskOpts) {
 			log.Error(err.Error())
 		}
 	}
-	for {
-		select {
-		case <-ticker.C:
-			if err := task(); err != nil {
-				log.Error(err.Error())
-				continue
-			}
+	for range ticker.C {
+		if err := task(); err != nil {
+			log.Error(err.Error())
 		}
 	}
 }

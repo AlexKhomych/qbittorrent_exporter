@@ -13,9 +13,10 @@ import (
 )
 
 var (
-	statePath      string = "state.json"
+	statePath      = "state.json"
 	lock           sync.Mutex
 	singleInstance *State
+	transientMode  = false
 )
 
 type State struct {
@@ -31,6 +32,11 @@ type TransferInfoState struct {
 
 func init() {
 	scheduler.Run(func() error {
+		lock.Lock()
+		defer lock.Unlock()
+		if transientMode || singleInstance == nil {
+			return nil
+		}
 		return singleInstance.write()
 	}, &scheduler.PeriodicTaskOpts{
 		Interval: 30 * time.Second,
@@ -41,20 +47,40 @@ func init() {
 func UpdatePath(path string) {
 	lock.Lock()
 	defer lock.Unlock()
-
 	statePath = path
 }
 
 func Get() *State {
+	lock.Lock()
+	defer lock.Unlock()
 	if singleInstance == nil {
-		singleInstance = readState(statePath)
+		if transientMode {
+			singleInstance = &State{}
+		} else {
+			singleInstance = readState(statePath)
+		}
 	}
 	return singleInstance
 }
 
-func readState(path string) *State {
-	var state State
+func SetTransientMode(isTransient bool) {
+	lock.Lock()
+	defer lock.Unlock()
+	transientMode = isTransient
+	if isTransient {
+		log.Info("State set to transient mode; no state will be persisted")
+		singleInstance = &State{}
+	} else {
+		singleInstance = readState(statePath)
+	}
+}
 
+func readState(path string) *State {
+	if transientMode {
+		return &State{}
+	}
+
+	var state State
 	if err := validator.ValidatePath(path, false); err != nil {
 		log.Warn(err.Error())
 		log.Info("State file will be created on the next write")
@@ -79,13 +105,13 @@ func readState(path string) *State {
 func (s *State) UpdateTransferInfo(dl, up int64) {
 	lock.Lock()
 	defer lock.Unlock()
-
 	s.TransferInfo.calculateDelta(dl, up)
 }
 
 func (s *State) write() error {
-	lock.Lock()
-	defer lock.Unlock()
+	if transientMode {
+		return nil
+	}
 
 	absPath, err := filepath.Abs(statePath)
 	if err != nil {
@@ -99,6 +125,8 @@ func (s *State) write() error {
 		log.Error(err.Error())
 		return fmt.Errorf("Failed to open state store file")
 	}
+	defer f.Close()
+
 	if err := json.NewEncoder(f).Encode(&s); err != nil {
 		log.Error(err.Error())
 		return fmt.Errorf("Failed to encode json to a state store file")
@@ -108,13 +136,12 @@ func (s *State) write() error {
 }
 
 func (t *TransferInfoState) calculateDelta(dl, up int64) {
-	var delta = func(current, previous int64) int64 {
+	delta := func(current, previous int64) int64 {
 		if current >= previous {
 			return current - previous
-		} else {
-			log.Info("Current value is lower than the previously recorded one. Posibility of session restart")
-			return current
 		}
+		log.Info("Current value is lower than the previously recorded one. Possibility of session restart")
+		return current
 	}
 
 	t.DlInfoDataTotal += delta(dl, t.DlInfoData)

@@ -3,7 +3,7 @@
 ### Quickstart
 
 ```bash
-curl --proto '=https' --tlsv1.3 -sSfL  https://raw.githubusercontent.com/AlexKhomych/qbittorrent_exporter/refs/tags/1.0.1/deploy/quickstart.sh | bash
+curl --proto '=https' --tlsv1.3 -sSfL  https://raw.githubusercontent.com/AlexKhomych/qbittorrent_exporter/refs/tags/1.0.2/deploy/quickstart.sh | bash
 ```
 
 1) Edit `config.yaml` under `$HOME/.config/qbittorrent_exporter/config.yaml` path.
