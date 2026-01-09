@@ -14,7 +14,7 @@ To view supported flags and their description
 ./qbittorrent_exporter -h
 ```
 ```bash
-Version: 1.0.1
+Version: 1.0.2
 
 Usage: qbittorrent_exporter [ Options... ]
 
@@ -44,8 +44,10 @@ Config file must be in YAML format.
 ```yaml
 qBittorrent:
   baseUrl: http://127.0.0.1:8080
+  insecureSkipVerify: false
   username: admin
   password: adminpassword
+  timeout: 10
 
 metrics:
   port: 17171
@@ -57,14 +59,16 @@ global:
 
 ## Envs
 
-| Name             | Example                |
-| ---------------- | ---------------------- |
-| QBE_URL          | https://127.0.0.1:8080 |
-| QBE_USERNAME     | admin                  |
-| QBE_PASSWORD     | adminpassword          |
-| QBE_METRICS_PORT | 17171                  |
-| QBE_METRICS_PATH | /metrics               |
-| QBE_STATE_PATH   | state.json             |
+| Name                     | Example                |
+| ------------------------ | ---------------------- |
+| QBE_URL                  | https://127.0.0.1:8080 |
+| QBE_INSECURE_SKIP_VERIFY | false                  |
+| QBE_USERNAME             | admin                  |
+| QBE_PASSWORD             | adminpassword          |
+| QBE_TIMEOUT      | 10                     |
+| QBE_METRICS_PORT         | 17171                  |
+| QBE_METRICS_PATH         | /metrics               |
+| QBE_STATE_PATH           | state.json             |
 **Table 1:** supported env and example values
 
 ## State

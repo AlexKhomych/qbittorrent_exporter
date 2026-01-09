@@ -1,7 +1,9 @@
 qBittorrent:
   baseUrl: http://127.0.0.1:8080
+  insecureSkipVerify: false
   username: admin
   password: adminpassword
+  timeout: 10
 
 metrics:
   port: 17171

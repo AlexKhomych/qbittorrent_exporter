@@ -6,14 +6,16 @@ HOME="${HOME:-"~"}"
 
 mkdir -p $HOME/.local/bin $HOME/.config/qbittorrent_exporter $HOME/.local/share/qbittorrent_exporter $HOME/.config/systemd/user
 
-curl -L https://github.com/AlexKhomych/qbittorrent_exporter/releases/download/1.0.1/qbittorrent_exporter -o $HOME/.local/bin/qbittorrent_exporter
+curl -L https://github.com/AlexKhomych/qbittorrent_exporter/releases/download/1.0.2/qbittorrent_exporter -o $HOME/.local/bin/qbittorrent_exporter
 chmod +x $HOME/.local/bin/qbittorrent_exporter
 
 cat > $HOME/.config/qbittorrent_exporter/config.yaml << EOF
 qBittorrent:
   baseUrl: http://127.0.0.1:8080
+  insecureSkipVerify: false
   username: admin
   password: adminpassword
+  timeout: 10
 
 metrics:
   port: 17171

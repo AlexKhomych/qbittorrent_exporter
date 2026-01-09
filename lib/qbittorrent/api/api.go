@@ -7,28 +7,36 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"qbittorrent_exporter/lib/log"
 	"qbittorrent_exporter/types"
 	"strings"
 )
 
 const (
-	QBT_APIV2 string = "/api/v2"
+	apiV2 = "/api/v2"
 
-	QBT_APIV2_AUTH_LOGIN    = QBT_APIV2 + "/auth/login"
-	QBT_APIV2_TORRENTS_INFO = QBT_APIV2 + "/torrents/info"
-	QBT_APIV2_TRANSFER_INFO = QBT_APIV2 + "/transfer/info"
-	QBT_APIV2_APP_VERSION   = QBT_APIV2 + "/app/version"
+	authLogin = apiV2 + "/auth/login"
+
+	torrentsInfo = apiV2 + "/torrents/info"
+	transferInfo = apiV2 + "/transfer/info"
+	appVersion   = apiV2 + "/app/version"
+
+	headerContentType      = "Content-Type"
+	headerReferer          = "Referer"
+	contentTypeFormEncoded = "application/x-www-form-urlencoded"
+	contentTypeJSON        = "application/json"
+	contentTypePlain       = "text/plain; charset=UTF-8"
 )
 
 type QBittorrentAPI struct {
-	baseUrl   string
+	baseURL   string
 	sidCookie *http.Cookie
+	client    *http.Client
 }
 
 type QBittorrentAPIOpts struct {
 	BaseURL     string
 	Credentials *QBittorrentCredentials
+	HttpClient  *http.Client
 }
 
 type QBittorrentCredentials struct {
@@ -38,7 +46,8 @@ type QBittorrentCredentials struct {
 
 func NewQBittorrentAPI(o *QBittorrentAPIOpts) (*QBittorrentAPI, error) {
 	api := &QBittorrentAPI{
-		baseUrl: o.BaseURL,
+		baseURL: o.BaseURL,
+		client:  o.HttpClient,
 	}
 
 	credentials := url.Values{
@@ -48,8 +57,7 @@ func NewQBittorrentAPI(o *QBittorrentAPIOpts) (*QBittorrentAPI, error) {
 	o.Credentials = &QBittorrentCredentials{}
 
 	if err := api.Login(credentials); err != nil {
-		log.Error(err.Error())
-		return nil, fmt.Errorf("Failed to login")
+		return nil, err
 	}
 
 	return api, nil
@@ -58,25 +66,22 @@ func NewQBittorrentAPI(o *QBittorrentAPIOpts) (*QBittorrentAPI, error) {
 func (api *QBittorrentAPI) Login(credentials url.Values) error {
 	var sidCookie *http.Cookie
 
-	loginUrl := api.baseUrl + QBT_APIV2_AUTH_LOGIN
-	if err := ValidateURL(loginUrl); err != nil {
-		log.Error(err.Error())
-		return fmt.Errorf("Failed to validate auth/login URL")
+	loginURL := api.baseURL + authLogin
+	if err := ValidateURL(loginURL); err != nil {
+		return fmt.Errorf("invalid login URL: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", loginUrl, strings.NewReader(credentials.Encode()))
+	req, err := http.NewRequest("POST", loginURL, strings.NewReader(credentials.Encode()))
 	if err != nil {
-		log.Error(err.Error())
-		return fmt.Errorf("Failed to generate auth/login request")
+		return fmt.Errorf("create login request: %w", err)
 	}
 
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Referer", api.baseUrl)
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	req.Header.Set(headerContentType, contentTypeFormEncoded)
+	req.Header.Set(headerReferer, api.baseURL)
+
+	resp, err := api.client.Do(req)
 	if err != nil {
-		log.Error(err.Error())
-		return fmt.Errorf("Failed to POST auth/login")
+		return fmt.Errorf("login request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -89,45 +94,50 @@ func (api *QBittorrentAPI) Login(credentials url.Values) error {
 	}
 
 	if sidCookie == nil {
-		return fmt.Errorf("SID Cookie is empty")
+		return fmt.Errorf("SID cookie not found in login response")
 	}
 	api.sidCookie = sidCookie
 	return nil
 }
 
-func (api *QBittorrentAPI) TorrentsInfo() ([]types.Torrent, error) {
-	var torrents []types.Torrent
-	infoUrl := api.baseUrl + QBT_APIV2_TORRENTS_INFO
-	if err := ValidateURL(infoUrl); err != nil {
-		log.Error(err.Error())
-		return torrents, fmt.Errorf("Failed to validate torrents/info URL")
+func (api *QBittorrentAPI) doAuthenticatedGet(endpoint, contentType string) ([]byte, error) {
+	url := api.baseURL + endpoint
+	if err := ValidateURL(url); err != nil {
+		return nil, fmt.Errorf("invalid URL for %s: %w", endpoint, err)
 	}
 
-	req, err := http.NewRequest("GET", infoUrl, nil)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Error(err.Error())
-		return torrents, fmt.Errorf("Failed to generate torrents/info request")
+		return nil, fmt.Errorf("create request for %s: %w", endpoint, err)
 	}
+
 	req.AddCookie(api.sidCookie)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(headerContentType, contentType)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := api.client.Do(req)
 	if err != nil {
-		log.Error(err.Error())
-		return torrents, fmt.Errorf("Failed to GET torrents/info")
+		return nil, fmt.Errorf("request failed for %s: %w", endpoint, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Error(err.Error())
-		return torrents, fmt.Errorf("Failed to read torrents/info body")
+		return nil, fmt.Errorf("read response body for %s: %w", endpoint, err)
+	}
+
+	return body, nil
+}
+
+func (api *QBittorrentAPI) TorrentsInfo() ([]types.Torrent, error) {
+	var torrents []types.Torrent
+
+	body, err := api.doAuthenticatedGet(torrentsInfo, contentTypeJSON)
+	if err != nil {
+		return torrents, err
 	}
 
 	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&torrents); err != nil {
-		log.Error(err.Error())
-		return torrents, fmt.Errorf("Failed to decode torrents/info body")
+		return torrents, fmt.Errorf("decode torrents info: %w", err)
 	}
 
 	return torrents, nil
@@ -135,74 +145,25 @@ func (api *QBittorrentAPI) TorrentsInfo() ([]types.Torrent, error) {
 
 func (api *QBittorrentAPI) TransferInfo() (types.Transfer, error) {
 	var transfer types.Transfer
-	infoUrl := api.baseUrl + QBT_APIV2_TRANSFER_INFO
-	if err := ValidateURL(infoUrl); err != nil {
-		log.Error(err.Error())
-		return transfer, fmt.Errorf("Failed to validate transfer/info URL")
-	}
 
-	req, err := http.NewRequest("GET", infoUrl, nil)
+	body, err := api.doAuthenticatedGet(transferInfo, contentTypeJSON)
 	if err != nil {
-		log.Error(err.Error())
-		return transfer, fmt.Errorf("Failed to generate transfer/info request")
-	}
-	req.AddCookie(api.sidCookie)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Error(err.Error())
-		return transfer, fmt.Errorf("Failed to GET transfer/info")
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Error(err.Error())
-		return transfer, fmt.Errorf("Failed to read transfer/info body")
+		return transfer, err
 	}
 
 	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&transfer); err != nil {
-		log.Error(err.Error())
-		return transfer, fmt.Errorf("Failed to decode transfer/info body")
+		return transfer, fmt.Errorf("decode transfer info: %w", err)
 	}
 
 	return transfer, nil
 }
 
 func (api *QBittorrentAPI) AppVersion() (string, error) {
-	var version string
-	versionUrl := api.baseUrl + QBT_APIV2_APP_VERSION
-	if err := ValidateURL(versionUrl); err != nil {
-		log.Error(err.Error())
-		return version, fmt.Errorf("Failed to validate app/version URL")
-	}
-
-	req, err := http.NewRequest("GET", versionUrl, nil)
+	body, err := api.doAuthenticatedGet(appVersion, contentTypePlain)
 	if err != nil {
-		log.Error(err.Error())
-		return version, fmt.Errorf("Failed to generate app/version request")
+		return "", err
 	}
-	req.AddCookie(api.sidCookie)
-	req.Header.Set("Content-Type", "text/plain; charset=UTF-8")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Error(err.Error())
-		return version, fmt.Errorf("Failed to GET app/version")
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Error(err.Error())
-		return version, fmt.Errorf("Failed to read app/version body")
-	}
-	version = string(body)
-
-	return version, nil
+	return string(body), nil
 }
 
 func ValidateURL(input string) error {
